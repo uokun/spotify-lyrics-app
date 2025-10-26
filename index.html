@@ -1,0 +1,857 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spotify Lyrics - Ultra</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        background: linear-gradient(
+          135deg,
+          #0a0a0a 0%,
+          #1a1a2e 50%,
+          #16213e 100%
+        );
+        color: white;
+        overflow-x: hidden;
+        min-height: 100vh;
+        position: relative;
+      }
+
+      /* 動的背景エフェクト */
+      .bg-effects {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        overflow: hidden;
+      }
+
+      .bg-gradient {
+        position: absolute;
+        width: 150%;
+        height: 150%;
+        background: radial-gradient(
+          circle at center,
+          rgba(29, 185, 84, 0.15) 0%,
+          transparent 70%
+        );
+        animation: pulse 8s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1) translate(-25%, -25%);
+          opacity: 0.3;
+        }
+        50% {
+          transform: scale(1.2) translate(-20%, -20%);
+          opacity: 0.5;
+        }
+      }
+
+      .particle {
+        position: absolute;
+        width: 2px;
+        height: 2px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        animation: float 15s infinite;
+      }
+
+      @keyframes float {
+        0%,
+        100% {
+          transform: translateY(0) translateX(0);
+          opacity: 0;
+        }
+        10% {
+          opacity: 1;
+        }
+        90% {
+          opacity: 1;
+        }
+        100% {
+          transform: translateY(-100vh) translateX(50px);
+          opacity: 0;
+        }
+      }
+
+      .container {
+        position: relative;
+        z-index: 1;
+        padding: 2em;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .view {
+        display: none;
+        animation: fadeInUp 0.6s ease-out;
+        width: 100%;
+        max-width: 800px;
+      }
+
+      .view.active {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* ログインビュー */
+      .login-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 24px;
+        padding: 3em;
+        text-align: center;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 450px;
+        width: 100%;
+      }
+
+      .login-card h1 {
+        font-size: 2.5em;
+        margin-bottom: 0.5em;
+        background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .login-card p {
+        color: rgba(255, 255, 255, 0.7);
+        margin-bottom: 2em;
+        line-height: 1.6;
+      }
+
+      button {
+        background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+        color: white;
+        border: none;
+        border-radius: 50px;
+        padding: 18px 40px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 10px 30px rgba(29, 185, 84, 0.3);
+        position: relative;
+        overflow: hidden;
+      }
+
+      button::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          rgba(255, 255, 255, 0.3),
+          transparent
+        );
+        transition: left 0.5s;
+      }
+
+      button:hover::before {
+        left: 100%;
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 15px 40px rgba(29, 185, 84, 0.4);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      #firebase-login-button {
+        background: linear-gradient(135deg, #4285f4 0%, #34a853 100%);
+        box-shadow: 0 10px 30px rgba(66, 133, 244, 0.3);
+      }
+
+      #firebase-login-button:hover {
+        box-shadow: 0 15px 40px rgba(66, 133, 244, 0.4);
+      }
+
+      /* 歌詞ビュー */
+      #lyrics-view {
+        width: 100%;
+        max-width: 900px;
+      }
+
+      #track-info {
+        display: flex; /* Modified */
+        flex-direction: column; /* Modified */
+        align-items: center; /* Modified */
+        text-align: center;
+        margin-bottom: 3em;
+        padding: 2.5em; /* Modified */
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(20px);
+        border-radius: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        animation: slideDown 0.6s ease-out;
+      }
+
+      @keyframes slideDown {
+        from {
+          opacity: 0;
+          transform: translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* Added: アルバムアート用のスタイル */
+      #album-art {
+        width: 180px;
+        height: 180px;
+        border-radius: 20px;
+        margin-bottom: 1.5em;
+        box-shadow: 0 15px 50px rgba(0, 0, 0, 0.5);
+        object-fit: cover;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+      }
+
+      /* Added: アルバムアートのホバーエフェクト */
+      #album-art:hover {
+        transform: scale(1.05);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+      }
+
+      #track-name {
+        font-size: 2.5em;
+        font-weight: 700;
+        margin-bottom: 0.3em;
+        background: linear-gradient(135deg, #ffffff 0%, #b3b3b3 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      #artist-name {
+        font-size: 1.2em;
+        color: rgba(255, 255, 255, 0.6);
+        font-weight: 500;
+      }
+
+      #lyrics-container {
+        height: 500px;
+        overflow-y: auto;
+        padding: 150px 1em; /* Modified: 上下に余白を追加 */
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+        position: relative;
+      }
+
+      #lyrics-container::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* グラデーションオーバーレイ */
+      #lyrics-container::before,
+      #lyrics-container::after {
+        content: "";
+        position: sticky;
+        left: 0;
+        width: 100%;
+        height: 150px; /* Modified: グラデーションの高さを増やす */
+        pointer-events: none;
+        z-index: 2;
+      }
+
+      #lyrics-container::before {
+        top: 0;
+        background: linear-gradient(
+          to bottom,
+          rgba(10, 10, 10, 1) 0%,
+          rgba(10, 10, 10, 0.8) 50%,
+          transparent 100%
+        ); /* Modified */
+      }
+
+      #lyrics-container::after {
+        bottom: 0;
+        background: linear-gradient(
+          to top,
+          rgba(10, 10, 10, 1) 0%,
+          rgba(10, 10, 10, 0.8) 50%,
+          transparent 100%
+        ); /* Modified */
+      }
+
+      #lyrics-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      .lyric-line {
+        padding: 25px 30px;
+        border-radius: 16px;
+        margin-bottom: 15px;
+        opacity: 0.35;
+        transform: scale(0.96);
+        transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid transparent;
+      }
+
+      .lyric-line:hover {
+        opacity: 0.6;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .lyric-line.active {
+        opacity: 1;
+        transform: scale(1);
+        background: linear-gradient(
+          135deg,
+          rgba(29, 185, 84, 0.15) 0%,
+          rgba(30, 215, 96, 0.1) 100%
+        );
+        border: 1px solid rgba(29, 185, 84, 0.3);
+        box-shadow: 0 10px 40px rgba(29, 185, 84, 0.2);
+        animation: activePulse 0.5s ease-out;
+      }
+
+      @keyframes activePulse {
+        0% {
+          transform: scale(0.96);
+          opacity: 0.35;
+        }
+        50% {
+          transform: scale(1.02);
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
+      .lyric-original {
+        font-size: 2em;
+        font-weight: 700;
+        line-height: 1.4;
+        margin-bottom: 8px;
+        letter-spacing: -0.02em;
+      }
+
+      .lyric-line.active .lyric-original {
+        background: linear-gradient(135deg, #ffffff 0%, #1db954 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .lyric-translation {
+        font-size: 1.1em;
+        color: rgba(255, 255, 255, 0.5);
+        line-height: 1.5;
+        font-weight: 400;
+      }
+
+      .lyric-line.active .lyric-translation {
+        color: rgba(255, 255, 255, 0.8);
+      }
+
+      /* 現在の歌詞に戻るボタン */
+      #back-to-current {
+        position: fixed;
+        bottom: 40px;
+        left: 50%;
+        transform: translateX(-50%) translateY(20px) scale(0.8);
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+        border: none;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        box-shadow: 0 10px 30px rgba(29, 185, 84, 0.4);
+        z-index: 100;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        opacity: 0;
+        pointer-events: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+      }
+
+      #back-to-current.visible {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+        pointer-events: all;
+      }
+
+      #back-to-current:hover {
+        transform: translateX(-50%) translateY(-5px) scale(1.1);
+        box-shadow: 0 15px 40px rgba(29, 185, 84, 0.5);
+      }
+
+      #back-to-current:active {
+        transform: translateX(-50%) translateY(-2px) scale(1.05);
+      }
+
+      /* レスポンシブ */
+      @media (max-width: 768px) {
+        .login-card {
+          padding: 2em;
+        }
+
+        .login-card h1 {
+          font-size: 2em;
+        }
+
+        #album-art {
+          /* Added */
+          width: 140px;
+          height: 140px;
+        }
+
+        #track-name {
+          font-size: 1.8em;
+        }
+
+        .lyric-original {
+          font-size: 1.5em;
+        }
+
+        .lyric-translation {
+          font-size: 1em;
+        }
+
+        #lyrics-container {
+          height: 400px;
+          padding: 120px 1em; /* Modified */
+        }
+
+        #back-to-current {
+          bottom: 20px;
+          width: 50px;
+          height: 50px;
+          font-size: 20px;
+        }
+      }
+
+      /* ローディングアニメーション */
+      .loading {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: #1db954;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+  </head>
+  <body>
+    <div class="bg-effects">
+      <div class="bg-gradient"></div>
+    </div>
+
+    <div class="container">
+      <div id="firebase-login-view" class="view active">
+        <div class="login-card">
+          <h1>🎵 Spotify Lyrics</h1>
+          <p>
+            リアルタイムで同期する歌詞体験<br />まずはGoogleアカウントでログイン
+          </p>
+          <button id="firebase-login-button">
+            <span>🔐 Googleでログイン</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="spotify-login-view" class="view">
+        <div class="login-card">
+          <h1>🎧 準備完了</h1>
+          <p>Spotifyと連携して<br />音楽と歌詞をシンクロさせましょう</p>
+          <button id="spotify-login-button">
+            <span>🎵 Spotifyにログイン</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="lyrics-view" class="view">
+        <div id="track-info">
+          <img id="album-art" src="" alt="Album Art" />
+          <h2 id="track-name">読み込み中...</h2>
+          <p id="artist-name">...</p>
+        </div>
+        <div id="lyrics-container">
+          <ul id="lyrics-list"></ul>
+        </div>
+        <button id="back-to-current" title="現在の歌詞に戻る">🎵</button>
+      </div>
+    </div>
+
+    <script>
+      // Firebase設定
+      const firebaseConfig = {
+        apiKey: "AIzaSyCMOb9PXyqWO6Gz8uhPf9-t8dpU2eWbJMo",
+        authDomain: "spotify-lyrics-app-b26e9.firebaseapp.com",
+        projectId: "spotify-lyrics-app-b26e9",
+        storageBucket: "spotify-lyrics-app-b26e9.appspot.com",
+        messagingSenderId: "577047802087",
+        appId: "1:577047802087:web:8038d12c73e504673eb242",
+        measurementId: "G-3T87PNR396",
+      };
+
+      firebase.initializeApp(firebaseConfig);
+      const auth = firebase.auth();
+      const db = firebase.firestore();
+
+      const CLIENT_ID = "f6f44855ec6a44809b8b10d0575234c6";
+      const CLIENT_SECRET = "f22bdbbdfe8d43a8ad3f5a854da5560b";
+      const REDIRECT_URI = "http://127.0.0.1:5500";
+
+      const firebaseLoginView = document.getElementById("firebase-login-view");
+      const spotifyLoginView = document.getElementById("spotify-login-view");
+      const lyricsView = document.getElementById("lyrics-view");
+      const firebaseLoginButton = document.getElementById(
+        "firebase-login-button"
+      );
+      const spotifyLoginButton = document.getElementById(
+        "spotify-login-button"
+      );
+      const lyricsList = document.getElementById("lyrics-list");
+      const lyricsContainer = document.getElementById("lyrics-container");
+      const backToCurrentBtn = document.getElementById("back-to-current");
+
+      let activeAccessToken = null;
+      let pollingInterval = null;
+      let currentTrackId = null;
+      let currentActiveLyricIndex = -1;
+      let isUserScrolling = false;
+      let scrollTimeout = null;
+
+      // *** 変更点 ***
+      // スクロール状態を管理するための変数を追加
+      let isAnimatingScroll = false;
+      let scrollAnimationTimeout = null;
+
+      function createParticles() {
+        const bgEffects = document.querySelector(".bg-effects");
+        for (let i = 0; i < 20; i++) {
+          const particle = document.createElement("div");
+          particle.className = "particle";
+          particle.style.left = Math.random() * 100 + "%";
+          particle.style.animationDelay = Math.random() * 15 + "s";
+          particle.style.animationDuration = 15 + Math.random() * 10 + "s";
+          bgEffects.appendChild(particle);
+        }
+      }
+      createParticles();
+
+      // *** 変更点 ***
+      // スクロールロジックを状態管理に対応させる
+      function scrollToActiveLyric(activeIndex) {
+        // もしアニメーション中に新しい命令が来たら、
+        // 前のアニメーションをキャンセルし、一瞬で現在位置をリセットしてから
+        // 新しいアニメーションを開始する
+        if (isAnimatingScroll) {
+          clearTimeout(scrollAnimationTimeout);
+          // behavior: 'auto'で瞬時に位置を補正
+          const resetScrollTop = calculateScrollTop(activeIndex);
+          if (resetScrollTop !== null) {
+            lyricsContainer.scrollTo({ top: resetScrollTop, behavior: "auto" });
+          }
+        }
+
+        requestAnimationFrame(() => {
+          const targetScrollTop = calculateScrollTop(activeIndex);
+          if (targetScrollTop === null) return;
+
+          lyricsContainer.scrollTo({
+            top: targetScrollTop,
+            behavior: "smooth",
+          });
+
+          // アニメーション状態を開始
+          isAnimatingScroll = true;
+          // アニメーションにかかる時間（少し余裕を持って500ms）後に状態をリセット
+          scrollAnimationTimeout = setTimeout(() => {
+            isAnimatingScroll = false;
+          }, 500);
+        });
+      }
+
+      function calculateScrollTop(activeIndex) {
+        if (activeIndex < 0) return null;
+        const activeElement = document.getElementById(
+          `lyric-line-${activeIndex}`
+        );
+        if (!activeElement) return null;
+
+        if (activeIndex === 0) {
+          return 0;
+        } else {
+          const precedingElement = document.getElementById(
+            `lyric-line-${activeIndex - 1}`
+          );
+          let offset = 100;
+          if (precedingElement) {
+            const style = window.getComputedStyle(precedingElement);
+            const marginBottom = parseInt(style.marginBottom, 10);
+            offset = precedingElement.offsetHeight + marginBottom;
+          }
+          return activeElement.offsetTop - offset;
+        }
+      }
+
+      lyricsContainer.addEventListener("scroll", () => {
+        if (!isAnimatingScroll) {
+          isUserScrolling = true;
+          backToCurrentBtn.classList.add("visible");
+        }
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+          isUserScrolling = false;
+        }, 3000);
+      });
+
+      backToCurrentBtn.addEventListener("click", () => {
+        isUserScrolling = false;
+        backToCurrentBtn.classList.remove("visible");
+        scrollToActiveLyric(currentActiveLyricIndex);
+      });
+
+      auth.onAuthStateChanged((user) => {
+        if (user) {
+          firebaseLoginView.classList.remove("active");
+          handleSpotifyLogin();
+        } else {
+          firebaseLoginView.classList.add("active");
+          spotifyLoginView.classList.remove("active");
+          lyricsView.classList.remove("active");
+        }
+      });
+
+      firebaseLoginButton.addEventListener("click", () => {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        auth
+          .signInWithPopup(provider)
+          .catch((error) => console.error("Firebaseログインエラー:", error));
+      });
+
+      function handleSpotifyLogin() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get("code");
+        const storedToken = localStorage.getItem("spotify_access_token");
+        if (storedToken) {
+          activeAccessToken = storedToken;
+          showLyricsView();
+        } else if (code) {
+          getAccessToken(code);
+        } else {
+          showSpotifyLoginView();
+        }
+      }
+
+      function showSpotifyLoginView() {
+        spotifyLoginView.classList.add("active");
+        lyricsView.classList.remove("active");
+        spotifyLoginButton.addEventListener("click", redirectToSpotifyLogin);
+      }
+
+      function showLyricsView() {
+        spotifyLoginView.classList.remove("active");
+        lyricsView.classList.add("active");
+        startPolling();
+      }
+
+      function redirectToSpotifyLogin() {
+        const scope = "user-read-currently-playing";
+        let url = "https://accounts.spotify.com/authorize";
+        url += `?response_type=code&client_id=${encodeURIComponent(
+          CLIENT_ID
+        )}&scope=${encodeURIComponent(scope)}&redirect_uri=${encodeURIComponent(
+          REDIRECT_URI
+        )}`;
+        window.location.href = url;
+      }
+
+      async function getAccessToken(code) {
+        window.history.pushState({}, document.title, REDIRECT_URI);
+        const response = await fetch("https://accounts.spotify.com/api/token", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Authorization: "Basic " + btoa(CLIENT_ID + ":" + CLIENT_SECRET),
+          },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            code: code,
+            redirect_uri: REDIRECT_URI,
+          }),
+        });
+        const data = await response.json();
+        if (data.access_token) {
+          activeAccessToken = data.access_token;
+          localStorage.setItem("spotify_access_token", activeAccessToken);
+          showLyricsView();
+        } else {
+          showSpotifyLoginView();
+        }
+      }
+
+      function startPolling() {
+        if (pollingInterval) clearInterval(pollingInterval);
+        getCurrentlyPlaying();
+        pollingInterval = setInterval(getCurrentlyPlaying, 250);
+      }
+
+      async function getCurrentlyPlaying() {
+        if (!activeAccessToken) return;
+        const response = await fetch(
+          "https://api.spotify.com/v1/me/player/currently-playing",
+          { headers: { Authorization: "Bearer " + activeAccessToken } }
+        );
+        if (response.status === 401) {
+          localStorage.removeItem("spotify_access_token");
+          activeAccessToken = null;
+          clearInterval(pollingInterval);
+          showSpotifyLoginView();
+          return;
+        }
+        if (response.status === 204) return;
+        if (response.status === 200) {
+          const data = await response.json();
+          if (data.item) {
+            if (currentTrackId !== data.item.id) {
+              currentTrackId = data.item.id;
+              document.getElementById("track-name").textContent =
+                data.item.name;
+              document.getElementById("artist-name").textContent =
+                data.item.artists.map((a) => a.name).join(", ");
+
+              const albumArtElement = document.getElementById("album-art");
+              if (data.item.album?.images?.[0]?.url) {
+                albumArtElement.src = data.item.album.images[0].url;
+                albumArtElement.alt = `${data.item.album.name} - Album Art`;
+              } else {
+                albumArtElement.src = "";
+                albumArtElement.alt = "No Album Art";
+              }
+
+              await displayFullLyrics(currentTrackId);
+            }
+            updateLyricsHighlight(data.progress_ms / 1000);
+          }
+        }
+      }
+
+      let currentLyricsData = [];
+      async function displayFullLyrics(trackId) {
+        const docRef = db.collection("lyrics").doc(trackId);
+        const doc = await docRef.get();
+        lyricsList.innerHTML = "";
+        currentActiveLyricIndex = -1;
+        if (doc.exists) {
+          currentLyricsData = doc.data().lines;
+          currentLyricsData.forEach((line, index) => {
+            const li = document.createElement("li");
+            li.id = `lyric-line-${index}`;
+            li.className = "lyric-line";
+            const originalText = document.createElement("div");
+            originalText.className = "lyric-original";
+            originalText.textContent = line.text;
+            const translatedText = document.createElement("div");
+            translatedText.className = "lyric-translation";
+            translatedText.textContent = line.tl;
+            li.appendChild(originalText);
+            li.appendChild(translatedText);
+            lyricsList.appendChild(li);
+          });
+        } else {
+          currentLyricsData = [];
+          lyricsList.innerHTML =
+            '<li class="lyric-line active"><div class="lyric-original">この曲の歌詞データがありません</div><div class="lyric-translation">エディタで追加してください</div></li>';
+        }
+      }
+
+      function updateLyricsHighlight(progressInSeconds) {
+        if (currentLyricsData.length === 0) return;
+        let newActiveIndex = -1;
+        for (let i = currentLyricsData.length - 1; i >= 0; i--) {
+          if (progressInSeconds >= currentLyricsData[i].time) {
+            newActiveIndex = i;
+            break;
+          }
+        }
+
+        if (newActiveIndex !== currentActiveLyricIndex) {
+          if (currentActiveLyricIndex !== -1) {
+            const oldActiveElement = document.getElementById(
+              `lyric-line-${currentActiveLyricIndex}`
+            );
+            if (oldActiveElement) oldActiveElement.classList.remove("active");
+          }
+
+          const newActiveElement = document.getElementById(
+            `lyric-line-${newActiveIndex}`
+          );
+          if (newActiveElement) {
+            newActiveElement.classList.add("active");
+          }
+          currentActiveLyricIndex = newActiveIndex;
+
+          // *** 変更点 ***
+          // 歌詞が切り替わった時だけ、スクロール命令を出す
+          if (!isUserScrolling && currentActiveLyricIndex !== -1) {
+            scrollToActiveLyric(currentActiveLyricIndex);
+          }
+        }
+      }
+    </script>
+  </body>
+</html>
+```

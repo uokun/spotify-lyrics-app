@@ -1,0 +1,299 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>歌詞エディタ</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        background-color: #f0f2f5;
+        color: #1c1e21;
+        padding: 2em;
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      .view {
+        display: none;
+      }
+      .view.active {
+        display: block;
+      }
+      h1,
+      h3 {
+        color: #1d2129;
+      }
+      hr {
+        border: 0;
+        height: 1px;
+        background-color: #ddd;
+        margin: 2em 0;
+      }
+      button {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 1em;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      input,
+      textarea {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 10px;
+        box-sizing: border-box;
+        font-family: monospace;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.9em;
+      }
+
+      /* Added: 履歴リスト用のスタイル */
+      #history-list-container {
+        background-color: #fff;
+        padding: 1.5em;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      #history-list {
+        list-style: none;
+        padding: 0;
+        max-height: 200px;
+        overflow-y: auto;
+        background-color: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        margin-top: 10px;
+      }
+      #history-list li {
+        padding: 10px 15px;
+        border-bottom: 1px solid #eee;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      #history-list li:hover {
+        background-color: #e9ecef;
+      }
+      #history-list li:last-child {
+        border-bottom: none;
+      }
+      #loading-indicator {
+        color: #666;
+      }
+      /* Added End */
+    </style>
+  </head>
+  <body>
+    <div id="auth-view" class="view active">
+      <h1>エディタへようこそ</h1>
+      <p>歌詞を編集するには、まずGoogleアカウントでログインしてください。</p>
+      <button id="google-login-button">Googleアカウントでログイン</button>
+    </div>
+
+    <div id="editor-view" class="view">
+      <h1>歌詞エディタ</h1>
+      <p>ログイン中のユーザー: <span id="user-email"></span></p>
+      <hr />
+
+      <!-- Added: 保存済み歌詞リストセクション -->
+      <div id="history-list-container">
+        <h3>保存済み歌詞リスト</h3>
+        <p id="loading-indicator" style="display: none">読み込み中...</p>
+        <ul id="history-list"></ul>
+      </div>
+      <!-- Added End -->
+
+      <hr />
+
+      <!-- Modified: 見出しを分かりやすく変更 -->
+      <h3>歌詞の入力・編集</h3>
+      <div>
+        <label for="trackId">Spotify 曲ID:</label>
+        <input
+          type="text"
+          id="trackId"
+          placeholder="spotify:track:xxxxxxxx の xxxxxx の部分"
+        />
+      </div>
+      <div>
+        <label for="lyrics-textarea"
+          >歌詞データ (秒数,英語歌詞,日本語翻訳):</label
+        >
+        <textarea
+          id="lyrics-textarea"
+          rows="15"
+          placeholder="例:&#10;5.12,Ground Control to Major Tom,こちら地上管制室、トム大佐応答せよ"
+        ></textarea>
+      </div>
+      <button id="save-button">Firestoreに保存</button>
+    </div>
+
+    <!-- Firebase SDKの読み込み -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script>
+      // ★★★ Firebase設定情報は、あなたのものをここに貼り付けてください ★★★
+      const firebaseConfig = {
+        apiKey: "AIzaSyCMOb9PXyqWO6Gz8uhPf9-t8dpU2eWbJMo",
+        authDomain: "spotify-lyrics-app-b26e9.firebaseapp.com",
+        projectId: "spotify-lyrics-app-b26e9",
+        storageBucket: "spotify-lyrics-app-b26e9.appspot.com",
+        messagingSenderId: "577047802087",
+        appId: "1:577047802087:web:8038d12c73e504673eb242",
+        measurementId: "G-3T87PNR396",
+      };
+
+      firebase.initializeApp(firebaseConfig);
+      const auth = firebase.auth();
+      const db = firebase.firestore();
+
+      const authView = document.getElementById("auth-view");
+      const editorView = document.getElementById("editor-view");
+      const googleLoginButton = document.getElementById("google-login-button");
+      const saveButton = document.getElementById("save-button");
+      const userEmailSpan = document.getElementById("user-email");
+      const trackIdInput = document.getElementById("trackId");
+      const lyricsTextarea = document.getElementById("lyrics-textarea");
+
+      // Added: 新しいUI要素の取得
+      const historyList = document.getElementById("history-list");
+      const loadingIndicator = document.getElementById("loading-indicator");
+
+      googleLoginButton.addEventListener("click", () => {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        auth
+          .signInWithPopup(provider)
+          .catch((error) => console.error("ログインエラー:", error));
+      });
+
+      // Modified: onAuthStateChangedを機能拡張
+      auth.onAuthStateChanged((user) => {
+        if (user) {
+          userEmailSpan.textContent = user.email;
+          authView.classList.remove("active");
+          editorView.classList.add("active");
+          loadHistory(); // Added: ログイン時に履歴を読み込む
+        } else {
+          authView.classList.add("active");
+          editorView.classList.remove("active");
+          historyList.innerHTML = ""; // Added: ログアウト時にリストをクリア
+        }
+      });
+
+      // Added: Firestoreから歌詞の履歴を読み込み、リスト表示する関数
+      const loadHistory = async () => {
+        loadingIndicator.style.display = "block";
+        historyList.innerHTML = "";
+        try {
+          const querySnapshot = await db.collection("lyrics").get();
+          if (querySnapshot.empty) {
+            historyList.innerHTML = "<li>保存済みの歌詞はありません。</li>";
+          } else {
+            const trackIds = [];
+            querySnapshot.forEach((doc) => trackIds.push(doc.id));
+            trackIds.sort().forEach((trackId) => {
+              // IDでソートして表示
+              const li = document.createElement("li");
+              li.textContent = trackId;
+              // liにクリックイベントを設定し、歌詞データをフォームに読み込む
+              li.addEventListener("click", () => loadLyricsForEditing(trackId));
+              historyList.appendChild(li);
+            });
+          }
+        } catch (error) {
+          console.error("履歴の読み込みエラー:", error);
+          alert("保存済み歌詞リストの読み込みに失敗しました。");
+          historyList.innerHTML = "<li>読み込みに失敗しました。</li>";
+        } finally {
+          loadingIndicator.style.display = "none";
+        }
+      };
+
+      // Added: 特定の曲の歌詞データをフォームに読み込む関数
+      const loadLyricsForEditing = async (trackId) => {
+        trackIdInput.value = trackId;
+        lyricsTextarea.value = "読み込み中...";
+        try {
+          const docRef = db.collection("lyrics").doc(trackId);
+          const docSnap = await docRef.get();
+
+          if (docSnap.exists) {
+            const { lines } = docSnap.data();
+            // lines配列をテキストエリアのフォーマットに変換
+            const lyricsText = lines
+              .map((line) => `${line.time},${line.text},${line.tl}`)
+              .join("\n");
+
+            lyricsTextarea.value = lyricsText;
+
+            // フォームのトップにスクロールして見やすくする
+            trackIdInput.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+          } else {
+            console.error("ドキュメントが見つかりません:", trackId);
+            alert("歌詞データの読み込みに失敗しました。");
+            lyricsTextarea.value = "データの読み込みに失敗しました。";
+          }
+        } catch (error) {
+          console.error("歌詞データの読み込みエラー:", error);
+          alert("歌詞データの読み込み中にエラーが発生しました。");
+          lyricsTextarea.value = `エラーが発生しました: ${error.message}`;
+        }
+      };
+
+      // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+      // ここが新しくなった、賢いデータ解析ロジックです！
+      // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+      saveButton.addEventListener("click", async () => {
+        const trackId = trackIdInput.value.trim();
+        const lyricsText = lyricsTextarea.value.trim();
+
+        if (!trackId || !lyricsText) {
+          return alert("曲IDと歌詞データの両方を入力してください。");
+        }
+
+        const linesArray = lyricsText
+          .split("\n")
+          .map((line) => {
+            if (!line.includes(",")) {
+              return null;
+            }
+            const firstCommaIndex = line.indexOf(",");
+            const lastCommaIndex = line.lastIndexOf(",");
+
+            // 最初のカンマと最後のカンマが同じ場合は、カンマが1つしかない
+            if (firstCommaIndex === lastCommaIndex) {
+              return null;
+            }
+
+            const timeStr = line.substring(0, firstCommaIndex);
+            const text = line.substring(firstCommaIndex + 1, lastCommaIndex);
+            const tl = line.substring(lastCommaIndex + 1);
+
+            return {
+              time: parseFloat(timeStr.trim() || 0),
+              text: text.trim(),
+              tl: tl.trim(),
+            };
+          })
+          .filter((item) => item !== null && !isNaN(item.time)); // nullやtimeが不正な行を除外
+
+        try {
+          await db.collection("lyrics").doc(trackId).set({ lines: linesArray });
+          alert(`曲ID: ${trackId} の歌詞を保存しました！`);
+          loadHistory(); // Added: 保存後、履歴リストを再読み込みして最新の状態にする
+        } catch (error) {
+          console.error("保存エラー:", error);
+          alert("保存に失敗しました。コンソールでエラーを確認してください。");
+        }
+      });
+    </script>
+  </body>
+</html>
